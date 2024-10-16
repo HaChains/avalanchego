@@ -26,12 +26,15 @@ RUN if [ "$TARGETPLATFORM" = "linux/arm64" ] && [ "$BUILDPLATFORM" != "linux/arm
     ; fi
 
 # Copy and download avalanche dependencies using go mod
-COPY go.mod .
-COPY go.sum .
-RUN go mod download
+COPY coreth/go.mod ../coreth/
+COPY coreth/go.sum ../coreth/
+COPY avalanchego/go.mod .
+COPY avalanchego/go.sum .
+RUN go env -w GOPROXY=https://goproxy.cn,direct && go mod download
 
 # Copy the code into the container
-COPY . .
+COPY avalanchego/. .
+COPY coreth/. ../coreth/
 
 # Ensure pre-existing builds are not available for inclusion in the final image
 RUN [ -d ./build ] && rm -rf ./build/* || true

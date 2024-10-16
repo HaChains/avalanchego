@@ -82,11 +82,11 @@ fi
 
 echo "Building Docker Image with tags: $DOCKER_IMAGE:$commit_hash , $DOCKER_IMAGE:$image_tag"
 ${DOCKER_CMD} -t "$DOCKER_IMAGE:$commit_hash" -t "$DOCKER_IMAGE:$image_tag" \
-              "$AVALANCHE_PATH" -f "$AVALANCHE_PATH/Dockerfile"
+              "$AVALANCHE_PATH/.." -f "$AVALANCHE_PATH/Dockerfile"
 
-echo "Building Docker Image with tags: $DOCKER_IMAGE:$commit_hash-race , $DOCKER_IMAGE:$image_tag-race"
-${DOCKER_CMD} --build-arg="RACE_FLAG=-r" -t "$DOCKER_IMAGE:$commit_hash-race" -t "$DOCKER_IMAGE:$image_tag-race" \
-              "$AVALANCHE_PATH" -f "$AVALANCHE_PATH/Dockerfile"
+#echo "Building Docker Image with tags: $DOCKER_IMAGE:$commit_hash-race , $DOCKER_IMAGE:$image_tag-race"
+#${DOCKER_CMD} --build-arg="RACE_FLAG=-r" -t "$DOCKER_IMAGE:$commit_hash-race" -t "$DOCKER_IMAGE:$image_tag-race" \
+#              "$AVALANCHE_PATH/.." -f "$AVALANCHE_PATH/Dockerfile"
 
 # Only tag the latest image for the master branch when images are pushed to a registry
 if [[ "${DOCKER_IMAGE}" == *"/"* && $image_tag == "master" ]]; then
