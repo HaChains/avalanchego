@@ -9,10 +9,11 @@ import (
 	_ "embed"
 
 	"github.com/ava-labs/avalanchego/utils/units"
+	"github.com/ava-labs/avalanchego/vms/components/gas"
 	"github.com/ava-labs/avalanchego/vms/platformvm/reward"
 
-	feecomponent "github.com/ava-labs/avalanchego/vms/components/fee"
 	txfee "github.com/ava-labs/avalanchego/vms/platformvm/txs/fee"
+	validatorfee "github.com/ava-labs/avalanchego/vms/platformvm/validators/fee"
 )
 
 var (
@@ -34,18 +35,28 @@ var (
 				AddSubnetDelegatorFee:         units.MilliAvax,
 			},
 			// TODO: Set these values to something more reasonable
-			DynamicFeeConfig: feecomponent.Config{
-				Weights: feecomponent.Dimensions{
-					feecomponent.Bandwidth: 1,
-					feecomponent.DBRead:    1,
-					feecomponent.DBWrite:   1,
-					feecomponent.Compute:   1,
+			DynamicFeeConfig: gas.Config{
+				Weights: gas.Dimensions{
+					gas.Bandwidth: 1,
+					gas.DBRead:    1,
+					gas.DBWrite:   1,
+					gas.Compute:   1,
 				},
-				MaxGasCapacity:           1_000_000,
-				MaxGasPerSecond:          1_000,
-				TargetGasPerSecond:       500,
-				MinGasPrice:              1,
-				ExcessConversionConstant: 1,
+				MaxCapacity:              1_000_000,
+				MaxPerSecond:             1_000,
+				TargetPerSecond:          500,
+				MinPrice:                 1,
+				ExcessConversionConstant: 5_000,
+			},
+			ValidatorFeeConfig: validatorfee.Config{
+				Capacity: 20_000,
+				Target:   10_000,
+				MinPrice: gas.Price(512 * units.NanoAvax),
+				// ExcessConversionConstant = (Capacity - Target) * NumberOfSecondsPerDoubling / ln(2)
+				//
+				// ln(2) is a float and the result is consensus critical, so we
+				// hardcode the result.
+				ExcessConversionConstant: 51_937_021, // Double every hour
 			},
 		},
 		StakingConfig: StakingConfig{

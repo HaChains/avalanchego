@@ -45,6 +45,12 @@ var _ = ginkgo.Describe("[Upgrade]", func() {
 
 	ginkgo.It("can upgrade versions", func() {
 		network := tmpnet.NewDefaultNetwork("avalanchego-upgrade")
+
+		// Get the default genesis so we can modify it
+		genesis, err := network.DefaultGenesis()
+		require.NoError(err)
+		network.Genesis = genesis
+
 		e2e.StartNetwork(tc, network, avalancheGoExecPath, "" /* pluginDir */, 0 /* shutdownDelay */, false /* reuseNetwork */)
 
 		tc.By(fmt.Sprintf("restarting all nodes with %q binary", avalancheGoExecPathToUpgradeTo))

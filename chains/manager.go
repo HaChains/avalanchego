@@ -505,11 +505,12 @@ func (m *manager) buildChain(chainParams ChainParameters, sb subnets.Subnet) (*c
 
 	ctx := &snow.ConsensusContext{
 		Context: &snow.Context{
-			NetworkID: m.NetworkID,
-			SubnetID:  chainParams.SubnetID,
-			ChainID:   chainParams.ID,
-			NodeID:    m.NodeID,
-			PublicKey: bls.PublicFromSecretKey(m.StakingBLSKey),
+			NetworkID:       m.NetworkID,
+			SubnetID:        chainParams.SubnetID,
+			ChainID:         chainParams.ID,
+			NodeID:          m.NodeID,
+			PublicKey:       bls.PublicFromSecretKey(m.StakingBLSKey),
+			NetworkUpgrades: m.Upgrades,
 
 			XChainID:    m.XChainID,
 			CChainID:    m.CChainID,
@@ -887,6 +888,8 @@ func (m *manager) createAvalancheChain(
 		return nil, err
 	}
 
+	var halter common.Halter
+
 	// Asynchronously passes messages from the network to the consensus engine
 	h, err := handler.New(
 		ctx,
@@ -895,11 +898,11 @@ func (m *manager) createAvalancheChain(
 		m.FrontierPollFrequency,
 		m.ConsensusAppConcurrency,
 		m.ResourceTracker,
-		validators.UnhandledSubnetConnector, // avalanche chains don't use subnet connector
 		sb,
 		connectedValidators,
 		peerTracker,
 		handlerReg,
+		halter.Halt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("error initializing network handler: %w", err)
@@ -950,6 +953,7 @@ func (m *manager) createAvalancheChain(
 
 	// create bootstrap gear
 	bootstrapCfg := smbootstrap.Config{
+		ShouldHalt:                     halter.Halted,
 		NonVerifyingParse:              block.ParseFunc(proposerVM.ParseLocalBlock),
 		AllGetsServer:                  snowGetHandler,
 		Ctx:                            ctx,
@@ -1012,7 +1016,8 @@ func (m *manager) createAvalancheChain(
 		avalancheBootstrapperConfig.StopVertexID = m.Upgrades.CortinaXChainStopVertexID
 	}
 
-	avalancheBootstrapper, err := avbootstrap.New(
+	var avalancheBootstrapper common.BootstrapableEngine
+	avalancheBootstrapper, err = avbootstrap.New(
 		avalancheBootstrapperConfig,
 		snowmanBootstrapper.Start,
 		avalancheMetrics,
@@ -1106,10 +1111,7 @@ func (m *manager) createSnowmanChain(
 		messageSender = sender.Trace(messageSender, m.Tracer)
 	}
 
-	var (
-		bootstrapFunc   func()
-		subnetConnector = validators.UnhandledSubnetConnector
-	)
+	var bootstrapFunc func()
 	// If [m.validatorState] is nil then we are creating the P-Chain. Since the
 	// P-Chain is the first chain to be created, we can use it to initialize
 	// required interfaces for the other chains
@@ -1145,12 +1147,6 @@ func (m *manager) createSnowmanChain(
 		// we don't need to be concerned about closing this channel multiple times.
 		bootstrapFunc = func() {
 			close(m.unblockChainCreatorCh)
-		}
-
-		// Set up the subnet connector for the P-Chain
-		subnetConnector, ok = vm.(validators.SubnetConnector)
-		if !ok {
-			return nil, fmt.Errorf("expected validators.SubnetConnector but got %T", vm)
 		}
 	}
 
@@ -1286,6 +1282,8 @@ func (m *manager) createSnowmanChain(
 		return nil, err
 	}
 
+	var halter common.Halter
+
 	// Asynchronously passes messages from the network to the consensus engine
 	h, err := handler.New(
 		ctx,
@@ -1294,11 +1292,11 @@ func (m *manager) createSnowmanChain(
 		m.FrontierPollFrequency,
 		m.ConsensusAppConcurrency,
 		m.ResourceTracker,
-		subnetConnector,
 		sb,
 		connectedValidators,
 		peerTracker,
 		handlerReg,
+		halter.Halt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("couldn't initialize message handler: %w", err)
@@ -1350,6 +1348,7 @@ func (m *manager) createSnowmanChain(
 
 	// create bootstrap gear
 	bootstrapCfg := smbootstrap.Config{
+		ShouldHalt:                     halter.Halted,
 		NonVerifyingParse:              block.ParseFunc(proposerVM.ParseLocalBlock),
 		AllGetsServer:                  snowGetHandler,
 		Ctx:                            ctx,

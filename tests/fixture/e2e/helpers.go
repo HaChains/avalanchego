@@ -21,7 +21,10 @@ import (
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/tests"
 	"github.com/ava-labs/avalanchego/tests/fixture/tmpnet"
+	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
+	"github.com/ava-labs/avalanchego/vms/platformvm/txs/fee"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
+	"github.com/ava-labs/avalanchego/wallet/chain/p/builder"
 	"github.com/ava-labs/avalanchego/wallet/subnet/primary"
 	"github.com/ava-labs/avalanchego/wallet/subnet/primary/common"
 )
@@ -49,6 +52,13 @@ const (
 	PrivateNetworksDirName = "private_networks"
 )
 
+// NewPrivateKey returns a new private key.
+func NewPrivateKey(tc tests.TestContext) *secp256k1.PrivateKey {
+	key, err := secp256k1.NewPrivateKey()
+	require.NoError(tc, err)
+	return key
+}
+
 // Create a new wallet for the provided keychain against the specified node URI.
 func NewWallet(tc tests.TestContext, keychain *secp256k1fx.Keychain, nodeURI tmpnet.NodeURI) primary.Wallet {
 	tc.Outf("{{blue}} initializing a new wallet for node %s with URI: %s {{/}}\n", nodeURI.NodeID, nodeURI.URI)
@@ -58,7 +68,7 @@ func NewWallet(tc tests.TestContext, keychain *secp256k1fx.Keychain, nodeURI tmp
 		EthKeychain:  keychain,
 	})
 	require.NoError(tc, err)
-	return primary.NewWalletWithOptions(
+	wallet := primary.NewWalletWithOptions(
 		baseWallet,
 		common.WithPostIssuanceFunc(
 			func(id ids.ID) {
@@ -66,6 +76,37 @@ func NewWallet(tc tests.TestContext, keychain *secp256k1fx.Keychain, nodeURI tmp
 			},
 		),
 	)
+	xAVAX, pAVAX := GetWalletBalances(tc, wallet)
+	tc.Outf("{{blue}}  wallet starting with %d X-chain nAVAX and %d P-chain nAVAX{{/}}\n", xAVAX, pAVAX)
+	return wallet
+}
+
+// OutputWalletBalances outputs the X-Chain and P-Chain balances of the provided wallet.
+func OutputWalletBalances(tc tests.TestContext, wallet primary.Wallet) {
+	xAVAX, pAVAX := GetWalletBalances(tc, wallet)
+	tc.Outf("{{blue}}  wallet has %d X-chain nAVAX and %d P-chain nAVAX{{/}}\n", xAVAX, pAVAX)
+}
+
+// GetWalletBalances retrieves the X-Chain and P-Chain balances of the provided wallet.
+func GetWalletBalances(tc tests.TestContext, wallet primary.Wallet) (uint64, uint64) {
+	require := require.New(tc)
+	var (
+		xWallet  = wallet.X()
+		xBuilder = xWallet.Builder()
+		pWallet  = wallet.P()
+		pBuilder = pWallet.Builder()
+	)
+	xBalances, err := xBuilder.GetFTBalance()
+	require.NoError(err, "failed to fetch X-chain balances")
+	pBalances, err := pBuilder.GetBalance()
+	require.NoError(err, "failed to fetch P-chain balances")
+	var (
+		xContext    = xBuilder.Context()
+		avaxAssetID = xContext.AVAXAssetID
+		xAVAX       = xBalances[avaxAssetID]
+		pAVAX       = pBalances[avaxAssetID]
+	)
+	return xAVAX, pAVAX
 }
 
 // Create a new eth client targeting the specified node URI.
@@ -194,16 +235,22 @@ func StartNetwork(
 ) {
 	require := require.New(tc)
 
-	require.NoError(
-		tmpnet.BootstrapNewNetwork(
-			tc.DefaultContext(),
-			tc.GetWriter(),
-			network,
-			DefaultNetworkDir,
-			avalancheGoExecPath,
-			pluginDir,
-		),
+	err := tmpnet.BootstrapNewNetwork(
+		tc.DefaultContext(),
+		tc.GetWriter(),
+		network,
+		DefaultNetworkDir,
+		avalancheGoExecPath,
+		pluginDir,
 	)
+	if err != nil {
+		// Ensure nodes are stopped if bootstrap fails. The network configuration
+		// will remain on disk to enable troubleshooting.
+		if stopErr := network.Stop(tc.DefaultContext()); stopErr != nil {
+			tc.Outf("failed to stop network after bootstrap failure: %v", stopErr)
+		}
+		require.FailNow("failed to bootstrap network: %s", err)
+	}
 
 	tc.Outf("{{green}}Successfully started network{{/}}\n")
 
@@ -233,4 +280,32 @@ func StartNetwork(
 		defer cancel()
 		require.NoError(network.Stop(ctx))
 	})
+}
+
+// NewPChainFeeCalculatorFromContext returns either a static or dynamic fee
+// calculator depending on the provided context.
+func NewPChainFeeCalculatorFromContext(context *builder.Context) fee.Calculator {
+	if context.GasPrice != 0 {
+		return fee.NewDynamicCalculator(context.ComplexityWeights, context.GasPrice)
+	}
+	return fee.NewStaticCalculator(context.StaticFeeConfig)
+}
+
+// GetRepoRootPath strips the provided suffix from the current working
+// directory. If the test binary is executed from the root of the repo, the
+// result will be the repo root.
+func GetRepoRootPath(suffix string) (string, error) {
+	// - When executed via a test binary, the working directory will be wherever
+	// the binary is executed from, but scripts should require execution from
+	// the repo root.
+	//
+	// - When executed via ginkgo (nicer for development + supports
+	// parallel execution) the working directory will always be the
+	// target path (e.g. [repo root]./tests/bootstrap/e2e) and getting the repo
+	// root will require stripping the target path suffix.
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSuffix(cwd, suffix), nil
 }
