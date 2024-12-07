@@ -92,8 +92,8 @@ type Parameters struct {
 // AlphaPreference is positive.
 func (p Parameters) Verify() error {
 	switch {
-	case p.AlphaPreference <= p.K/2:
-		return fmt.Errorf("%w: k = %d, alphaPreference = %d: fails the condition that: k/2 < alphaPreference", ErrParametersInvalid, p.K, p.AlphaPreference)
+	//case p.AlphaPreference <= p.K/2:
+	//	return fmt.Errorf("%w: k = %d, alphaPreference = %d: fails the condition that: k/2 < alphaPreference", ErrParametersInvalid, p.K, p.AlphaPreference)
 	case p.AlphaConfidence < p.AlphaPreference:
 		return fmt.Errorf("%w: alphaPreference = %d, alphaConfidence = %d: fails the condition that: alphaPreference <= alphaConfidence", ErrParametersInvalid, p.AlphaPreference, p.AlphaConfidence)
 	case p.K < p.AlphaConfidence:
@@ -120,6 +120,7 @@ func (p Parameters) MinPercentConnectedHealthy() float64 {
 	// accept operations. If AlphaPreference were used, committing could be
 	// extremely unlikely to happen, even while healthy.
 	alphaRatio := float64(p.AlphaConfidence) / float64(p.K)
+	// ### MARK ###
 	return alphaRatio*(1-MinPercentConnectedBuffer) + MinPercentConnectedBuffer
 }
 

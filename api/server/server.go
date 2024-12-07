@@ -215,7 +215,7 @@ func (s *server) addChainRoute(chainName string, handler http.Handler, ctx *snow
 		handler = api.TraceHandler(handler, chainName, s.tracer)
 	}
 	// Apply middleware to reject calls to the handler before the chain finishes bootstrapping
-	handler = rejectMiddleware(handler, ctx)
+	// handler = rejectMiddleware(handler, ctx)
 	handler = s.metrics.wrapHandler(chainName, handler)
 	return s.router.AddRouter(url, endpoint, handler)
 }
