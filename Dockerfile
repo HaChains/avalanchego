@@ -8,17 +8,6 @@ FROM --platform=$BUILDPLATFORM golang:$GO_VERSION-bookworm AS builder
 
 WORKDIR /build
 
-# Copy and download avalanche dependencies using go mod
-COPY go.mod .
-COPY go.sum .
-RUN go mod download
-
-# Copy the code into the container
-COPY . .
-
-# Ensure pre-existing builds are not available for inclusion in the final image
-RUN [ -d ./build ] && rm -rf ./build/* || true
-
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 
@@ -35,6 +24,20 @@ RUN if [ "$TARGETPLATFORM" = "linux/arm64" ] && [ "$BUILDPLATFORM" != "linux/arm
     ; else \
     echo "export CC=gcc" > ./build_env.sh \
     ; fi
+
+# Copy and download avalanche dependencies using go mod
+#COPY coreth/go.mod ../coreth/
+#COPY coreth/go.sum ../coreth/
+#COPY avalanchego/go.mod .
+#COPY avalanchego/go.sum .
+
+# Copy the code into the container
+COPY avalanchego/. .
+COPY coreth/. ../coreth/
+RUN go env -w GOPROXY=https://goproxy.cn,direct && go mod tidy
+
+# Ensure pre-existing builds are not available for inclusion in the final image
+RUN [ -d ./build ] && rm -rf ./build/* || true
 
 # Build avalanchego. The build environment is configured with build_env.sh from the step
 # enabling cross-compilation.
